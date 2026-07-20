@@ -1,0 +1,5 @@
+streamlit
+python-amazon-paapi
+pillow
+python-dotenv
+requests
