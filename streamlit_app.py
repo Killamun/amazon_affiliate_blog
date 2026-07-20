@@ -446,4 +446,4 @@ if mode.startswith("Manual"):
             st.error("Please add at least one product with a title or Amazon link.")
             st.stop()
 
-        st.success(f"
+        st.success(f"Ready with {len(products)} product(s). All links use your tag: `{partner_tag}`")
