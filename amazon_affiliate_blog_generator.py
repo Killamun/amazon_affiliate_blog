@@ -328,3 +328,122 @@ def create_pinterest_image(niche: str, products: list) -> Image.Image:
     draw.text((W // 2, footer_y + 70), "Tap to see current prices →", fill=accent, font=font_small, anchor="mt")
 
     return img
+# ---------------------------------------------------------------------------
+# Streamlit UI
+# ---------------------------------------------------------------------------
+
+st.set_page_config(
+    page_title="Amazon Affiliate Blog Generator",
+    page_icon="🛒",
+    layout="wide",
+)
+
+st.title("🛒 Amazon High-Ticket Affiliate Blog + Pinterest Generator")
+st.caption("Works with or without Amazon Creators API • Uses your Associate Tag on every link")
+
+# Sidebar
+with st.sidebar:
+    st.header("⚙️ Settings")
+
+    mode = st.radio(
+        "Mode",
+        ["Manual Entry (Recommended for you)", "Live Amazon Search (needs API)"],
+        index=0,
+        help="Manual mode works right now with only your Associate Tag."
+    )
+
+    partner_tag = st.text_input(
+        "Your Associate Tag",
+        value=DEFAULT_TAG,
+        help="This gets added to every product link"
+    )
+    st.session_state["partner_tag"] = partner_tag.strip() or DEFAULT_TAG
+
+    st.divider()
+
+    if mode.startswith("Live"):
+        st.subheader("Creators API Credentials")
+        st.info("Only needed for automatic search. You currently don’t have these yet.")
+        st.text_input("Credential ID", key="cred_id")
+        st.text_input("Credential Secret", type="password", key="cred_secret")
+        st.text_input("API Version", value="2.2", key="api_version")
+
+
+# ===================== MANUAL MODE =====================
+if mode.startswith("Manual"):
+    st.subheader("📝 Manual Product Entry")
+    st.markdown("Paste Amazon product links (or ASINs). The app will automatically add your tag **`{}`** to every link.".format(partner_tag))
+
+    niche = st.text_input("Niche / Blog Title Focus", value="standing desk",
+                          help="Example: robot vacuum, espresso machine, noise cancelling headphones")
+
+    st.markdown("### Add Products")
+    st.caption("You can add up to 8 products. Fill in as much info as you have.")
+
+    if "manual_products" not in st.session_state:
+        st.session_state.manual_products = [{"url": "", "title": "", "price": "", "image_url": "", "features": ""}]
+
+    for i, prod in enumerate(st.session_state.manual_products):
+        with st.expander(f"Product {i+1}", expanded=(i == 0)):
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                url = st.text_input("Amazon Link or ASIN", value=prod["url"], key=f"url_{i}",
+                                    placeholder="https://www.amazon.com/dp/B0XXXXXXX or just the ASIN")
+            with col2:
+                if st.button("Remove", key=f"rm_{i}") and len(st.session_state.manual_products) > 1:
+                    st.session_state.manual_products.pop(i)
+                    st.rerun()
+
+            title = st.text_input("Product Title", value=prod["title"], key=f"title_{i}")
+            price = st.text_input("Price (numbers only)", value=prod["price"], key=f"price_{i}", placeholder="349.99")
+            image_url = st.text_input("Image URL (optional but recommended)", value=prod["image_url"], key=f"img_{i}",
+                                      placeholder="Right-click product image on Amazon → Copy image address")
+            features = st.text_area("Key Features (one per line)", value=prod["features"], key=f"feat_{i}", height=80)
+
+            st.session_state.manual_products[i] = {
+                "url": url,
+                "title": title,
+                "price": price,
+                "image_url": image_url,
+                "features": features,
+            }
+
+    if st.button("➕ Add another product"):
+        st.session_state.manual_products.append({"url": "", "title": "", "price": "", "image_url": "", "features": ""})
+        st.rerun()
+
+    generate = st.button("🚀 Generate Blog + Pinterest Assets", type="primary", use_container_width=True)
+
+    if generate:
+        products = []
+        for p in st.session_state.manual_products:
+            if not p["url"] and not p["title"]:
+                continue
+
+            asin = extract_asin(p["url"]) if p["url"] else None
+            aff_url = make_affiliate_link(p["url"] or asin or "", partner_tag)
+
+            try:
+                price_val = float(re.sub(r"[^\d.]", "", p["price"])) if p["price"] else 0.0
+            except Exception:
+                price_val = 0.0
+
+            features_list = [f.strip() for f in p["features"].splitlines() if f.strip()] if p["features"] else []
+
+            products.append({
+                "asin": asin or "MANUAL",
+                "title": p["title"] or "Product",
+                "image_url": p["image_url"] or None,
+                "price": price_val,
+                "currency": "USD",
+                "url": aff_url,
+                "features": features_list,
+                "rating": None,
+                "review_count": 0,
+            })
+
+        if not products:
+            st.error("Please add at least one product with a title or Amazon link.")
+            st.stop()
+
+        st.success(f"
